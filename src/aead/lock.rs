@@ -35,6 +35,37 @@ pub fn aead(plain_text: &[u8], key: [u8; 32], nonce: [u8; 24], ad: &[u8]) -> (Ve
     }
 }
 
+/// Encrypt and authenticate plaintext with additional data, in-place
+///
+/// # Example
+///
+/// ```
+/// use monocypher::aead::lock::aead_in_place;
+///
+/// let mut text:Vec<u8> = b"plaintext".to_vec();
+/// let key = [137u8; 32];
+/// let nonce = [120u8; 24];
+/// let ad = "data";
+///
+/// let mac = aead_in_place(text.as_mut_slice(), key, nonce, ad.as_bytes());
+/// ```
+pub fn aead_in_place(text: &mut[u8], key: [u8; 32], nonce: [u8; 24], ad: &[u8]) -> [u8; 16]{
+    unsafe {
+        let mut mac = mem::MaybeUninit::<[u8; 16]>::uninit();
+        ffi::crypto_aead_lock(
+            text.as_mut_ptr(),
+            mac.as_mut_ptr() as *mut u8,
+            key.as_ptr(),
+            nonce.as_ptr(),
+            ad.as_ptr(),
+            ad.len(),
+            text.as_ptr(),
+            text.len(),
+        );
+        mac.assume_init()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -51,6 +82,22 @@ mod test {
         assert_eq!(a, vec![191, 3, 85, 157, 207, 3]);
         assert_eq!(
             b,
+            [170, 84, 72, 240, 51, 131, 115, 191, 122, 222, 170, 200, 158, 83, 202, 191]
+        );
+    }
+
+    #[test]
+    fn easy_aead_in_place() {
+        let mut text: Vec<u8> = b"secret".to_vec();
+
+        let key: [u8; 32] = [1; 32];
+        let nonce: [u8; 24] = [2; 24];
+        let ad = "data";
+        let mac = aead_in_place(text.as_mut_slice(), key, nonce, ad.as_bytes());
+
+        assert_eq!(text, vec![191, 3, 85, 157, 207, 3]);
+        assert_eq!(
+            mac,
             [170, 84, 72, 240, 51, 131, 115, 191, 122, 222, 170, 200, 158, 83, 202, 191]
         );
     }
